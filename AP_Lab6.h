@@ -69,3 +69,5 @@ int Lab6_AddNotifyCharacteristic(uint16_t uuid, uint16_t thesize, void *pt,
 // Output: APOK if successful,
 //         APFAIL if notification not configured, or if SNP failure
 int Lab6_StartAdvertisement(void);
+
+void BuildAddNotifyCharDescriptorMsg(char name[], uint8_t *msg);

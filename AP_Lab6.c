@@ -11,6 +11,7 @@
 #include "../inc/UART1.h"
 #include "../inc/AP.h"
 #include "AP_Lab6.h"
+#include <string.h>
 //**debug macros**APDEBUG defined in AP.h********
 #ifdef APDEBUG
 #define OutString(STRING) UART0_OutString(STRING)
@@ -49,6 +50,18 @@ typedef struct NotifyCharacteristics{
 extern const uint32_t NOTIFYMAXCHARACTERISTICS;
 extern uint32_t NotifyCharacteristicCount;
 extern NotifyCharacteristic_t NotifyCharacteristicList[];
+extern const uint8_t  NPI_GetStatus[];
+extern const uint8_t NPI_GetVersion[];
+extern uint8_t NPI_AddService[];
+extern const uint8_t NPI_Register[];
+extern uint8_t NPI_AddCharValue[];
+extern uint8_t NPI_AddCharDescriptor[];
+extern uint8_t NPI_GATTSetDeviceName[];
+extern const uint8_t NPI_SetAdvertisement1[];
+extern uint8_t NPI_SetAdvertisementData[];
+extern const uint8_t NPI_StartAdvertisement[];
+extern const uint8_t NPI_AddCharDescriptor4[];
+#define HEADS 6					//	SOF, SIZE, CMD, FCS
 //**************Lab 6 routines*******************
 // **********SetFCS**************
 // helper function, add check byte to message
@@ -60,9 +73,16 @@ extern NotifyCharacteristic_t NotifyCharacteristicList[];
 // Outputs: none
 void SetFCS(uint8_t *msg){
 //****You implement this function as part of Lab 6*****
-
-  
+	//	FCS does not contain the SOF
+	uint8_t fcs = 0;
+	int32_t size;
+	size = AP_GetSize(msg);
+  msg++;	//	skip SOF
+  for(int32_t i=-4;i<size;i++)
+    fcs^=(*msg++);
+  *msg=fcs;
 }
+
 //*************BuildGetStatusMsg**************
 // Create a Get Status message, used in Lab 6
 // Inputs pointer to empty buffer of at least 6 bytes
@@ -71,9 +91,10 @@ void SetFCS(uint8_t *msg){
 void BuildGetStatusMsg(uint8_t *msg){
 // hint: see NPI_GetStatus in AP.c
 //****You implement this function as part of Lab 6*****
-
-  
+	memcpy(msg, NPI_GetStatus, AP_GetSize(NPI_GetStatus)+HEADS);
+	SetFCS(msg);
 }
+
 //*************Lab6_GetStatus**************
 // Get status of connection, used in Lab 6
 // Input:  none
@@ -84,10 +105,11 @@ void BuildGetStatusMsg(uint8_t *msg){
 // DD is ATT method in progress
 uint32_t Lab6_GetStatus(void){volatile int r; uint8_t sendMsg[8];
   OutString("\n\rGet Status");
-  BuildGetStatusMsg(sendMsg);
-  r = AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+   BuildGetStatusMsg(sendMsg);
+  r = AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   return (RecvBuf[4]<<24)+(RecvBuf[5]<<16)+(RecvBuf[6]<<8)+(RecvBuf[7]);
 }
+
 
 //*************BuildGetVersionMsg**************
 // Create a Get Version message, used in Lab 6
@@ -97,8 +119,8 @@ uint32_t Lab6_GetStatus(void){volatile int r; uint8_t sendMsg[8];
 void BuildGetVersionMsg(uint8_t *msg){
 // hint: see NPI_GetVersion in AP.c
 //****You implement this function as part of Lab 6*****
-  
-  
+  memcpy(msg, NPI_GetVersion, AP_GetSize(NPI_GetVersion)+HEADS);
+  SetFCS(msg);
 }
 //*************Lab6_GetVersion**************
 // Get version of the SNP application running on the CC2650, used in Lab 6
@@ -107,7 +129,7 @@ void BuildGetVersionMsg(uint8_t *msg){
 uint32_t Lab6_GetVersion(void){volatile int r;uint8_t sendMsg[8];
   OutString("\n\rGet Version");
   BuildGetVersionMsg(sendMsg);
-  r = AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE); 
+  r = AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE); 
   return (RecvBuf[5]<<8)+(RecvBuf[6]);
 }
 
@@ -119,18 +141,20 @@ uint32_t Lab6_GetVersion(void){volatile int r;uint8_t sendMsg[8];
 // build the necessary NPI message that will add a service
 void BuildAddServiceMsg(uint16_t uuid, uint8_t *msg){
 //****You implement this function as part of Lab 6*****
-  
-  
+  memcpy(msg, NPI_AddService, AP_GetSize(NPI_AddService)+HEADS);
+  msg[6] = uuid&0xFF;
+  msg[7] = uuid>>8;
+  SetFCS(msg);
 }
 //*************Lab6_AddService**************
 // Add a service, used in Lab 6
 // Inputs uuid is 0xFFF0, 0xFFF1, ...
 // Output APOK if successful,
 //        APFAIL if SNP failure
-int Lab6_AddService(uint16_t uuid){ int r; uint8_t sendMsg[12];
+int Lab6_AddService(uint16_t uuid){ int r;uint8_t sendMsg[12];
   OutString("\n\rAdd service");
   BuildAddServiceMsg(uuid,sendMsg);
-  r = AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);  
+  r = AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);  
   return r;
 }
 //*************AP_BuildRegisterServiceMsg**************
@@ -140,18 +164,18 @@ int Lab6_AddService(uint16_t uuid){ int r; uint8_t sendMsg[12];
 // build the necessary NPI message that will register a service
 void BuildRegisterServiceMsg(uint8_t *msg){
 //****You implement this function as part of Lab 6*****
-  
-  
+  memcpy(msg, NPI_Register, AP_GetSize(NPI_Register)+HEADS);
+  SetFCS(msg);
 }
 //*************Lab6_RegisterService**************
 // Register a service, used in Lab 6
 // Inputs none
 // Output APOK if successful,
 //        APFAIL if SNP failure
-int Lab6_RegisterService(void){ int r; uint8_t sendMsg[8];
+int Lab6_RegisterService(void){ int r;uint8_t sendMsg[8];
   OutString("\n\rRegister service");
   BuildRegisterServiceMsg(sendMsg);
-  r = AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r = AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   return r;
 }
 
@@ -170,8 +194,13 @@ void BuildAddCharValueMsg(uint16_t uuid,
 // for a hint see NPI_AddCharValue in AP.c
 // for a hint see first half of AP_AddCharacteristic and first half of AP_AddNotifyCharacteristic
 //****You implement this function as part of Lab 6*****
-  
-    
+  memcpy(msg, NPI_AddCharValue, AP_GetSize(NPI_AddCharValue)+HEADS);
+  msg[3] = 0x35;   // SNP Add Characteristic Value Declaration
+  msg[4] = 0x82;  
+  msg[5] = permission; // 0=none,1=read,2=write, 3=Read+write, GATT Permission
+  msg[6] = properties; // 2=read,8=write,0x0A=read+write,0x10=notify, GATT Properties
+  msg[11] = 0xFF&uuid; msg[12] = uuid>>8;
+  SetFCS(msg);
 }
 
 //*************BuildAddCharDescriptorMsg**************
@@ -186,8 +215,26 @@ void BuildAddCharDescriptorMsg(char name[], uint8_t *msg){
 // for a hint see NPI_AddCharDescriptor in AP.c
 // for a hint see second half of AP_AddCharacteristic
 //****You implement this function as part of Lab 6*****
+
+  memcpy(msg, NPI_AddCharDescriptor, AP_GetSize(NPI_AddCharDescriptor)+HEADS);
+  int i=0;
+  while((i<20)&&(name[i])){
+    msg[11+i] = name[i];
+		i++;
+  }
   
+  if(i==0) return;
   
+  msg[11+i] = 0; i++;	//	set null for endl
+  msg[1] = 6+i;  // frame length
+  msg[3] = 0x35; // SNP Add Characteristic Descriptor Declaration
+  msg[4] = 0x83;
+  msg[5] = 0x80; // User Description String
+  msg[6] = 0x01; // GATT Read Permissions
+  msg[7] = msg[9] = i;  // string length
+  msg[8] = msg[10] = 0; // string length
+  
+  SetFCS(msg);
 }
 
 //*************Lab6_AddCharacteristic**************
@@ -210,14 +257,14 @@ int Lab6_AddCharacteristic(uint16_t uuid, uint16_t thesize, void *pt, uint8_t pe
   if(thesize>8) return APFAIL;
   if(name[0]==0) return APFAIL;       // empty name
   if(CharacteristicCount>=MAXCHARACTERISTICS) return APFAIL; // error
-  BuildAddCharValueMsg(uuid,permission,properties,sendMsg);
+  BuildAddCharValueMsg(uuid,permission,properties,(uint8_t*)sendMsg);
   OutString("\n\rAdd CharValue");
-  r=AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r=AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   if(r == APFAIL) return APFAIL;
   handle = (RecvBuf[7]<<8)+RecvBuf[6]; // handle for this characteristic
   OutString("\n\rAdd CharDescriptor");
-  BuildAddCharDescriptorMsg(name,sendMsg);
-  r=AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  BuildAddNotifyCharDescriptorMsg(name,(uint8_t*)sendMsg);
+  r=AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   if(r == APFAIL) return APFAIL;
   CharacteristicList[CharacteristicCount].theHandle = handle;
   CharacteristicList[CharacteristicCount].size = thesize;
@@ -243,8 +290,26 @@ void BuildAddNotifyCharDescriptorMsg(char name[], uint8_t *msg){
 // for a hint see NPI_AddCharDescriptor4 in VerySimpleApplicationProcessor.c
 // for a hint see second half of AP_AddNotifyCharacteristic
 //****You implement this function as part of Lab 6*****
+  memcpy(msg, NPI_AddCharDescriptor4, AP_GetSize(NPI_AddCharDescriptor4)+HEADS);
   
+  int i=0;
+  while((i<20)&&(name[i])){
+    msg[12+i] = name[i];
+		i++;
+  }
+
+  if(i==0) return;
   
+  msg[12+i] = 0; i++;	//	set null for endl
+  msg[1] = 7+i;  // frame length
+  msg[3] = 0x35; // SNP Add Characteristic Descriptor Declaration
+  msg[4] = 0x83;
+  msg[5] = 0x84; // User Description String
+  msg[6] = 0x03, // CCCD parameters read+write
+  msg[7] = 0x01; // GATT Read Permissions
+  msg[8] = msg[10] = i;  // string length
+  msg[9] = msg[11] = 0; // string length
+  SetFCS(msg);
 }
   
 //*************Lab6_AddNotifyCharacteristic**************
@@ -263,14 +328,14 @@ int Lab6_AddNotifyCharacteristic(uint16_t uuid, uint16_t thesize, void *pt,
   uint8_t sendMsg[36];  
   if(thesize>8) return APFAIL;
   if(NotifyCharacteristicCount>=NOTIFYMAXCHARACTERISTICS) return APFAIL; // error
-  BuildAddCharValueMsg(uuid,0,0x10,sendMsg);
+  BuildAddCharValueMsg(uuid,0,0x10,(uint8_t*)sendMsg);
   OutString("\n\rAdd Notify CharValue");
-  r=AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r=AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   if(r == APFAIL) return APFAIL;
   handle = (RecvBuf[7]<<8)+RecvBuf[6]; // handle for this characteristic
   OutString("\n\rAdd CharDescriptor");
-  BuildAddNotifyCharDescriptorMsg(name,sendMsg);
-  r=AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  BuildAddNotifyCharDescriptorMsg(name,(uint8_t*)sendMsg);
+  r=AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   if(r == APFAIL) return APFAIL;
   NotifyCharacteristicList[NotifyCharacteristicCount].uuid = uuid;
   NotifyCharacteristicList[NotifyCharacteristicCount].theHandle = handle;
@@ -293,8 +358,18 @@ void BuildSetDeviceNameMsg(char name[], uint8_t *msg){
 // for a hint see NPI_GATTSetDeviceNameMsg in VerySimpleApplicationProcessor.c
 // for a hint see NPI_GATTSetDeviceName in AP.c
 //****You implement this function as part of Lab 6*****
+
+  memcpy(msg, NPI_GATTSetDeviceName, AP_GetSize(NPI_GATTSetDeviceName)+HEADS);
+  int i=0;
+  while((i<20)&&(name[i])){
+    msg[8+i] = name[i];
+		i++;
+  }
+
+  if(i==0) return;
   
-  
+  msg[1] = 3+i;  // frame length
+  SetFCS(msg);
 }
 //*************BuildSetAdvertisementData1Msg**************
 // Create a Set Advertisement Data message, used in Lab 6
@@ -311,8 +386,8 @@ void BuildSetAdvertisementData1Msg(uint8_t *msg){
 // TI_ST_KEY_DATA_ID
 // Key state=0
 //****You implement this function as part of Lab 6*****
-  
-  
+  memcpy(msg, NPI_SetAdvertisement1, AP_GetSize(NPI_SetAdvertisement1)+HEADS);
+  SetFCS(msg);
 }
 
 //*************BuildSetAdvertisementDataMsg**************
@@ -325,8 +400,30 @@ void BuildSetAdvertisementDataMsg(char name[], uint8_t *msg){
 // for a hint see NPI_SetAdvertisementDataMsg in VerySimpleApplicationProcessor.c
 // for a hint see NPI_SetAdvertisementData in AP.c
 //****You implement this function as part of Lab 6*****
+  const uint8_t ending[] = {
+	  // connection interval range
+  0x05,           // length of this data
+  0x12,           // GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE
+  0x50,0x00,      // DEFAULT_DESIRED_MIN_CONN_INTERVAL
+  0x20,0x03,      // DEFAULT_DESIRED_MAX_CONN_INTERVAL
+// Tx power level
+  0x02,           // length of this data
+  0x0A,           // GAP_ADTYPE_POWER_LEVEL
+  0x00           // 0dBm
+	};
+  memcpy(msg, NPI_SetAdvertisementData, AP_GetSize(NPI_SetAdvertisementData)+HEADS);
+  int i=0;
+  while((i<20)&&(name[i])){
+    msg[8+i] = name[i];
+		i++;
+  }
+
+  if(i==0) return;
   
-  
+  msg[1] = 12+i;  // frame length
+  msg[6] = 1 + i;
+  memcpy(msg + 8 + i, ending, sizeof(ending));
+  SetFCS(msg);
 }
 //*************BuildStartAdvertisementMsg**************
 // Create a Start Advertisement Data message, used in Lab 6
@@ -338,8 +435,10 @@ void BuildStartAdvertisementMsg(uint16_t interval, uint8_t *msg){
 // for a hint see NPI_StartAdvertisementMsg in VerySimpleApplicationProcessor.c
 // for a hint see NPI_StartAdvertisement in AP.c
 //****You implement this function as part of Lab 6*****
-  
-  
+  memcpy(msg, NPI_StartAdvertisement, AP_GetSize(NPI_StartAdvertisement)+HEADS); 
+  msg[8] = (uint8_t)(interval);
+  msg[9] = (uint8_t)(interval>>8);
+  SetFCS(msg);
 }
 
 //*************Lab6_StartAdvertisement**************
@@ -350,16 +449,16 @@ void BuildStartAdvertisementMsg(uint16_t interval, uint8_t *msg){
 int Lab6_StartAdvertisement(void){volatile int r; uint8_t sendMsg[40];
   OutString("\n\rSet Device name");
   BuildSetDeviceNameMsg("Shape the World",sendMsg);
-  r =AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r =AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   OutString("\n\rSetAdvertisement1");
   BuildSetAdvertisementData1Msg(sendMsg);
-  r =AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r =AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   OutString("\n\rSetAdvertisement Data");
   BuildSetAdvertisementDataMsg("Shape the World",sendMsg);
-  r =AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r =AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   OutString("\n\rStartAdvertisement");
   BuildStartAdvertisementMsg(100,sendMsg);
-  r =AP_SendMessageResponse(sendMsg,RecvBuf,RECVSIZE);
+  r =AP_SendMessageResponse((uint8_t*)sendMsg,RecvBuf,RECVSIZE);
   return r;
 }
 
